@@ -1,7 +1,6 @@
 #include <iostream>
 #include <fstream>
 #include <string>
-#include <cstdlib>
 #include <sstream>
 #include <iomanip>
 
@@ -21,30 +20,16 @@ void display_help() {
               << "  The tool uses xclip to interact with the clipboard. Make sure xclip is installed before using the tool.\n";
 }
 
-
-void copy_to_clipboard(const std::string& content, const std::string& format) {
-    // Prepare a temporary file to hold the content
-    std::ofstream temp_file("temp_copy_file.txt");
-    if (!temp_file.is_open()) {
-        std::cerr << "Could not create a temporary file!" << std::endl;
-        exit(1);
-    }
-
-    // Write the content to the temporary file
-    temp_file << content;
-    temp_file.close();
-
+void copy_to_clipboard(const std::string& content) {
     // Use xclip to copy the content to clipboard
-    int result = system(("xclip -selection clipboard -t " + format + " -i temp_copy_file.txt").c_str());
-
-    // Remove the temporary file
-    system("rm temp_copy_file.txt");
-
-    if (result == 0) {
-        std::cout << "The content of the file has been copied to the clipboard." << std::endl;
-    } else {
-        std::cerr << "An error occurred while copying to the clipboard." << std::endl;
+    FILE* pipe = popen("xclip -selection clipboard -in", "w");
+    if (!pipe) {
+        std::cerr << "Error: Unable to open pipe to xclip." << std::endl;
+        return;
     }
+    fwrite(content.c_str(), sizeof(char), content.size(), pipe);
+    pclose(pipe);
+    std::cout << "The content of the file has been copied to the clipboard." << std::endl;
 }
 
 std::string get_plain_text(const std::string& content) {
@@ -97,24 +82,23 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    std::string content((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+    std::stringstream buffer;
+    buffer << file.rdbuf();
+    std::string content = buffer.str();
 
     std::string formatted_content;
-    std::string mime_type = "text/plain";
-
     if (format_flag == "--plain") {
         formatted_content = get_plain_text(content);
     } else if (format_flag == "--line-numbers") {
         formatted_content = get_text_with_line_numbers(content);
     } else if (format_flag == "--html") {
         formatted_content = get_html_formatted_text(content);
-        mime_type = "text/html";
     } else {
         std::cerr << "Unknown format flag: " << format_flag << std::endl;
         return 1;
     }
 
-    copy_to_clipboard(formatted_content, mime_type);
+    copy_to_clipboard(formatted_content);
 
     return 0;
 }
